@@ -1,0 +1,36 @@
+node_modules/
+dist/
+.env.local
+*.log
+public/cesium/
+
+# Local tests, specifications, reports and development-only evidence
+docs/
+tests/
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+**/AGENTS.md
+AGENT_EXECUTION_RULES.md
+编程规范/
+coverage/
+test-results/
+playwright-report/
+scripts/verify-*.mjs
+scripts/measure-*.mjs
+scripts/profile-*.mjs
+scripts/capture-*.mjs
+scripts/write-source-record.mjs
+
+# Local credentials, editor settings and temporary files
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
+.idea/
+.vscode/
+*.tsbuildinfo
+*.tmp
+.DS_Store
+Thumbs.db

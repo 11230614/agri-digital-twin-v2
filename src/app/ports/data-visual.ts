@@ -1,0 +1,3 @@
+export type VegetationMode='natural'|'ndvi';
+export const NDVI_STOPS=[{value:-1,color:'#b56b4a'},{value:.2,color:'#dbb45b'},{value:.5,color:'#b8d65b'},{value:.8,color:'#47b875'},{value:1,color:'#157d61'}] as const;
+export interface DataVisualSnapshot {readonly entityId:string;readonly mode:VegetationMode;readonly ndvi:number|null;readonly ndviColor:string;readonly quality:'good'|'unknown'|'stale';readonly raster?:{readonly width:number;readonly height:number;readonly revision:number;readonly uploads:number};readonly flowVisible:boolean;readonly flowPhase:number;readonly flowStatus:string;readonly flowM3h:number|null;readonly reducedMotion:boolean;readonly extraDrawCalls:number;readonly flowTriangles:number;}

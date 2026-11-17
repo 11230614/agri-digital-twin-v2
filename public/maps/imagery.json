@@ -1,0 +1,25 @@
+{
+  "id": "suining-sentinel2-2026-11-06",
+  "url": "/maps/suining-true-color.png",
+  "sourceFilename": "2026-11-06-00_00_2026-11-06-23_59_Sentinel-2_L2A_True_color.tiff",
+  "sourceSha256": "c54c3f36fdf129d1b9681111167a7677a4070c920314f843dbcbed1e0d3b2567",
+  "imageSha256": "073c97dd51a8d355bdc6fcaf9bab6697b940670fc27a18c396da17161dc8d46d",
+  "crs": "EPSG:4326",
+  "boundsDegrees": [
+    117.765031,
+    33.907321,
+    117.941658,
+    33.996617
+  ],
+  "width": 1966,
+  "height": 1198,
+  "pixelMetersAtOrigin": [
+    8.305868471187015,
+    8.267802003046903
+  ],
+  "validPixelFraction": 1.0,
+  "credit": "用户提供 · Sentinel-2 L2A / Copernicus · 2026-11-06",
+  "role": "surrounding-imagery-not-surveyed-farm",
+  "conversion": "RGB float32 0..1 clipped and rounded to uint8; no spatial resampling",
+  "acceptedUse": "2026-11-13 用户确认仅作周边底图，园区内部由 Three.js 呈现"
+}

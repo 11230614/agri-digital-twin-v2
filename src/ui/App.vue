@@ -1,0 +1,1 @@
+<template><RouterView :key="$route.path + '/' + ($route.query.quality ?? 'balanced') + '/' + ($route.query.mapPipeline ?? 'imagery') + '/' + ($route.query.benchmarkPath ?? 'static') + '/' + ($route.query.environment ?? 'on') + '/' + ($route.query.atmosphere ?? 'on')" /></template>

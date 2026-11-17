@@ -1,0 +1,39 @@
+{
+  "name": "agri-digital-twin-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "node scripts/prepare-cesium.mjs && vite --host 127.0.0.1",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "node scripts/verify-browser.mjs",
+    "build": "node scripts/prepare-cesium.mjs && vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "cesium": "1.121.0",
+    "pinia": "2.3.1",
+    "three": "0.170.0",
+    "vue": "3.5.13",
+    "vue-router": "4.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.51.1",
+    "@types/node": "22.10.5",
+    "@types/three": "0.170.0",
+    "@vitejs/plugin-vue": "5.2.1",
+    "typescript": "5.7.3",
+    "vite": "6.4.1",
+    "vitest": "3.2.4",
+    "vue-tsc": "2.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@cesium/engine": "11.0.0",
+      "@cesium/widgets": "8.0.0",
+      "@cesium/engine>@zip.js/zip.js": "2.7.52"
+    }
+  }
+}
