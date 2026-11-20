@@ -2,7 +2,7 @@ import {Vector3} from 'three';
 import type {CameraShot} from '../app/ports/scene';
 import type {Vec3} from '../shared/contracts/spatial';
 import {fittedCameraPosition} from '../spatial/fitCamera';
-import {PARK_SHOTS} from '../config/park-shots';
+import {GREENHOUSE_INTERIOR_VIEWS,PARK_SHOTS} from '../config/park-shots';
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
 const radians=(v:number)=>v*Math.PI/180;
 export interface NavigationState {targetM:Vec3;distanceM:number;maxDistanceM:number;yawRad:number;pitchRad:number;positionM:Vec3;mode:'orbit'|'local'}
@@ -13,7 +13,7 @@ export class ParkNavigationPolicy {
  private local=false;
  private flight?:{start:NavigationState;target:Vec3;distance:number;yaw:number;pitch:number;elapsed:number};
  focusStatus:'idle'|'moving'|'arrived'|'interrupted'='idle';
- cancelFocus(){if(this.flight){this.flight=undefined;this.focusStatus='interrupted';}}
+ cancelFocus(){if(this.flight||this.focusStatus==='arrived'){this.flight=undefined;this.focusStatus='interrupted';}}
  focus(target:Vec3,radius:number,minimumDistance:number,insets:{left:number;right:number}={left:0,right:0},pose:{yawRad?:number;pitchRad?:number}={}){
   if(![...target,radius,minimumDistance,insets.left,insets.right,pose.yawRad??.4,pose.pitchRad??radians(42)].every(Number.isFinite)||radius<=0||minimumDistance<=0||insets.left<0||insets.right<0)throw new Error('无效聚焦参数');
   this.cancelFocus();
@@ -35,7 +35,7 @@ export class ParkNavigationPolicy {
  constructor(shot:CameraShot,width:number,height:number){this.reset(shot,width,height);}
  reset(shot:CameraShot,width:number,height:number){
   this.cancelFocus();this.focusStatus='idle';
-  this.shot=shot;this.local=shot.id==='CAM-02'||shot.id==='CAM-03';this.width=width;this.height=height;
+  this.shot=shot;this.local=shot.id==='CAM-03'||GREENHOUSE_INTERIOR_VIEWS.some(view=>view.shot.id===shot.id);this.width=width;this.height=height;
   const p=new Vector3(...fittedCameraPosition(shot,width,height)),target=new Vector3(...shot.targetM),offset=p.clone().sub(target);
   this.distance=offset.length();this.yaw=Math.atan2(offset.x,offset.z);this.pitch=Math.asin(offset.y/this.distance);
   // Near shots rotate around a point 2m ahead, avoiding a sweep around the whole greenhouse.

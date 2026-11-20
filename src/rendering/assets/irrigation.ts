@@ -11,10 +11,10 @@ k.box(.8,.08,.4,[0,.04,0],m.dark);k.box(.78,1.1,.326,[0,.63,0],m.housing);k.box(
 k.box(.72,1.02,.008,[0,.63,.167],m.dark);k.box(.702,1,.008,[0,.63,.175],m.housing);
 k.box(.23,.13,.01,[-.075,.91,.184],m.dark);k.box(.208,.108,.002,[-.075,.91,.19],m.screen);
 k.box(.022,.17,.024,[.265,.61,.188],m.dark);
-for(const x of [-.15,-.075,0])k.add(new CylinderGeometry(.012,.012,.006,8),m.handle,[x,.78,.187]).rotation.x=Math.PI/2;
+const indicators=[-.15,-.075,0].map(x=>{const mesh=k.add(new CylinderGeometry(.012,.012,.006,8),m.handle,[x,.78,.187]);mesh.rotation.x=Math.PI/2;return mesh;});
 for(let i=0;i<5;i++)k.box(.21,.007,.004,[-.07,.24+i*.025,.182],m.dark);
 for(const y of [.32,.98])k.box(.018,.045,.018,[-.35,y,.182],m.metal);
-return {root:k.root,dispose:k.dispose};}
+return {root:k.root,indicators,dispose:k.dispose};}
 export const FIELD_IRRIGATION=Object.freeze({main:{id:'sample-main',diameterM:.06,from:[-12.6,.08,15] as const,to:[12.6,.08,15] as const,lengthM:25.2},branches:Array.from({length:10},(_,i)=>({id:`sample-branch-${i+1}`,diameterM:.025,from:[-11.7+2.6*i,.08,15] as const,to:[-11.7+2.6*i,.08,-14] as const,lengthM:29}))});
 export function createIrrigation(m:UtilityMaterials,branchHeightM=.08,transparentPipes=false){
 if(!Number.isFinite(branchHeightM)||branchHeightM<.08||branchHeightM>.2)throw new Error("支管高度无效");const k=kit();k.root.name='irrigation-sample';

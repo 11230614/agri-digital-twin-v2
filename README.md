@@ -1,4 +1,6 @@
-![农业数字孪生项目效果](images/agri-digital-twin.png)
+![棚内人眼视角](images/greenhouse-interior.png)
+
+![沿垄近景](images/field-closeup.png)
 
 # 禾境智慧农场 · 农业数字孪生可视化平台
 

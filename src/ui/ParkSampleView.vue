@@ -4,7 +4,7 @@ import {useRoute} from 'vue-router';
 import {FarmRuntime} from '../app/composition/FarmRuntime';
 import {createParkSampleScene} from '../rendering/ParkSampleScene';
 import {createParkBenchmarkPath} from '../config/park-benchmark-path';
-import {PARK_SHOTS} from '../config/park-shots';
+import {GREENHOUSE_INTERIOR_VIEWS,PARK_SHOTS} from '../config/park-shots';
 import {PARK_COUNTS,PARK_LAYOUT} from '../config/park-layout';
 import {ENVIRONMENT_REVIEW_SHOT} from '../config/park-environment';
 import {SEASONS,DAY_PERIODS,type Season,type DayPeriod} from '../app/ports/environment';
@@ -21,7 +21,8 @@ let runtime:FarmRuntime|undefined,off:(()=>void)|undefined,clock:ReturnType<type
 const quality=computed(()=>route.query.quality==='reference'?'reference':'balanced');
 const facade=()=>runtime?.getFacade();
 const showOverview=()=>{facade()?.selectEntity(null);facade()?.setInspection({cutaway:false,doorRatio:state.value?.inspection?.doorRatio??0});facade()?.setCameraShot('CAM-01');};
-const title=computed(()=>PARK_SHOTS.find(s=>s.id===state.value?.shotId)?.label??'整园总览');
+const shots=[...PARK_SHOTS,...GREENHOUSE_INTERIOR_VIEWS.filter(({shot})=>shot.id!=='CAM-02').map(({shot})=>shot),ENVIRONMENT_REVIEW_SHOT];
+const title=computed(()=>shots.find(s=>s.id===state.value?.shotId)?.label??'整园总览');
 const time=(value:number)=>new Date(value).toLocaleTimeString('zh-CN',{hour12:false});
 const format=(value:number)=>value.toLocaleString('en-US');
 const stale=computed(()=>!data.value||now.value-data.value.timestamp>18000);
@@ -29,6 +30,7 @@ const water=computed(()=>data.value?.plots.reduce((n,p)=>n+p.completedM3,0)??0);
 const sparkline=computed(()=>data.value?.history.map((v,i,a)=>`${a.length===1?0:i/(a.length-1)*280},${66-(v-23)*25}`).join(' ')??'');
 const goShot=(id:string)=>facade()?.setCameraShot(id);
 const selected=computed(()=>state.value?.interaction?.entities.find(e=>e.id===state.value?.interaction?.selectedId));
+const selectedInteriorShot=computed(()=>GREENHOUSE_INTERIOR_VIEWS.find(view=>view.entityId===selected.value?.id)?.shot);
 const selectedPlot=computed(()=>data.value?.plots.find(p=>p.id===(selected.value?.ownerId??selected.value?.id)));
 const kindNames:Record<InteractionEntity['kind'],string>={'plot':'种植田块','soil-sensor':'土壤传感器','greenhouse':'温室','weather-station':'气象站','controller':'控制柜'};
 const selectedHouse=computed(()=>data.value?.greenhouses.find(h=>h.id===selected.value?.id));
@@ -36,7 +38,9 @@ const selectedInvalid=computed(()=>selected.value?.kind==='greenhouse'?stale.val
 const alerts=computed(()=>stale.value?[]:data.value?.alerts??[]);
 const navigationMessage=ref('');
 const navigateEntity=(id:string,focus=false)=>{if(!state.value?.interaction?.entities.some(e=>e.id===id)){navigationMessage.value='目标暂不可定位';return;}navigationMessage.value='';facade()?.selectEntity(id);if(focus)focusEntity(id);};
-const focusing=computed(()=>selected.value&&state.value?.interaction?.focusStatus!=='idle');
+const focusStatus=computed(()=>state.value?.interaction?.focusStatus);
+const focusing=computed(()=>selected.value&&(focusStatus.value==='moving'||focusStatus.value==='arrived'));
+const dofActive=computed(()=>state.value?.postProcessing?.depthEffect==='depthOfField');
 const samplePlot=computed(()=>data.value?.plots.find(p=>p.id===(state.value?.dataVisual?.entityId??'plot-02')));
 const ndviPoints=computed(()=>samplePlot.value?.ndvi.history.map((v,i,a)=>`${a.length===1?0:i/(a.length-1)*270},${45-v*40}`).join(' ')??'');
 const setMode=(mode:VegetationMode)=>facade()?.setVegetationMode(mode);
@@ -55,7 +59,17 @@ watch(()=>selected.value?.id,async id=>{if(!id)return;await nextTick();document.
 watch([panels,mobileSide,clean],async()=>{await nextTick();updateFocusInsets();});
 onMounted(()=>{
  clock=setInterval(()=>{now.value=Date.now();},1000);
- runtime=new FarmRuntime(host.value!,renderer=>createParkSampleScene(renderer,quality.value,route.query.environment!=='off',route.query.atmosphere!=='off'),[...PARK_SHOTS,ENVIRONMENT_REVIEW_SHOT],{localNavigation:true,imageryOnlyCesium:route.query.mapPipeline!=='legacy',cameraPath:import.meta.env.DEV&&typeof route.query.benchmarkPath==='string'?createParkBenchmarkPath(route.query.benchmarkPath):undefined});
+ runtime=new FarmRuntime(
+   host.value!,
+   renderer=>createParkSampleScene(renderer,quality.value,route.query.environment!=='off',route.query.atmosphere!=='off'),
+   shots,
+   {
+     localNavigation:true,
+     imageryOnlyCesium:route.query.mapPipeline!=='legacy',
+     cameraPath:import.meta.env.DEV&&typeof route.query.benchmarkPath==='string'?createParkBenchmarkPath(route.query.benchmarkPath):undefined,
+     postProcessing:{bloom:true,enhance:true,depthOfField:true,ssao:true},
+   },
+ );
  off=runtime.getFacade().subscribe(s=>{state.value=s;if(s.monitoring&&s.monitoring!==store.snapshot)store.project(s.monitoring);});
  updateFocusInsets();window.addEventListener('resize',updateFocusInsets);
  void runtime.start().then(()=>{if(import.meta.env.DEV&&typeof route.query.benchmarkPath==='string')goShot(route.query.benchmarkPath);}).catch(error=>{console.error('园区初始化失败',error);});
@@ -75,7 +89,7 @@ onBeforeUnmount(()=>{window.removeEventListener('resize',updateFocusInsets);clea
     <button class="hud-action" data-testid="sidebar-toggle" :aria-expanded="panels" aria-controls="monitor-panels" @click="panels=!panels">{{panels?'隐藏面板':'显示面板'}}</button>
    </header>
    <div v-show="panels" class="monitor-hud" id="monitor-panels">
-    <div class="view-indicator"><span class="live-dot"></span>{{focusing?selected?.name+'观察':title}}<i></i><span>场景实时渲染</span></div>
+    <div class="view-indicator"><span class="live-dot"></span>{{focusing?selected?.name+'观察':title}}<i></i><span>{{dofActive?'景深已生效':'场景实时渲染'}}</span></div>
     <div class="mobile-tabs"><button :aria-pressed="mobileSide==='left'" @click="mobileSide='left'">园区与环境</button><button :aria-pressed="mobileSide==='right'" @click="mobileSide='right'">温室与设备</button></div>
     <aside class="hud-column hud-left" :class="{'mobile-visible':mobileSide==='left'}" aria-label="园区与环境监测">
      <section class="hud-card overview-card"><div class="card-heading"><h2>园区总览</h2><span>PARK OVERVIEW</span></div>
@@ -95,6 +109,8 @@ onBeforeUnmount(()=>{window.removeEventListener('resize',updateFocusInsets);clea
     <aside class="hud-column hud-right" :class="{'mobile-visible':mobileSide==='right'}" aria-label="温室设备与告警">
      <section v-if="state?.appearance" class="hud-card appearance-card" data-testid="appearance-card"><div class="card-heading"><h2>场景环境</h2><span>VISUAL PRESET · DEMO</span></div>
       <div class="appearance-controls"><label>景观季节<select data-testid="season-select" :value="state.appearance.season" @change="setSeason"><option v-for="season in SEASONS" :key="season.id" :value="season.id">{{season.label}}</option></select></label><label>光照时段<select data-testid="period-select" :value="state.appearance.period" @change="setPeriod"><option v-for="period in DAY_PERIODS" :key="period.id" :value="period.id">{{period.label}}</option></select></label></div>
+      <p v-if="state?.postProcessing?.bypassReason==='ndvi'" class="card-footnote">NDVI 数据模式暂停后处理，保持色标。</p>
+      <p v-if="state?.postProcessing?.error" class="card-footnote" role="status">后处理不可用，已恢复原画面。</p>
       <button class="hud-action appearance-reset" data-testid="appearance-reset" @click="facade()?.setEnvironmentPreset({season:'summer',period:'day'})">恢复夏季白天</button><p class="card-footnote">仅为环境演示，不改变实时钟、监测数据、作物状态或 NDVI 色带。冬季积雪限景观树、草地和远山；夜晚使用可观察月光。</p>
      </section>
      <section v-if="selected" class="hud-card entity-details" data-testid="entity-details"><div class="card-heading"><h2>选中对象</h2><span>ENTITY / DEMO</span></div><h3>{{selected.name}}</h3><code>{{selected.id}}</code><div class="stat-line"><span>类型</span><b>{{kindNames[selected.kind]}}</b></div>
@@ -102,7 +118,12 @@ onBeforeUnmount(()=>{window.removeEventListener('resize',updateFocusInsets);clea
       <template v-else-if="selected.kind==='weather-station'"><div class="stat-line"><span>园区温度 / 湿度</span><b>{{selectedInvalid?'—':data?.temperature}} °C / {{selectedInvalid?'—':data?.humidity}} %</b></div><div class="stat-line"><span>风速 / 光照</span><b>{{selectedInvalid?'—':data?.wind}} m/s / {{selectedInvalid?'—':((data?.light??0)/1000).toFixed(1)}} klx</b></div><p class="card-footnote">园区气象汇总 · 非本站独立遥测；未提供设备在线或故障状态。</p></template>
       <template v-else><div v-if="selected.kind==='plot'" class="stat-line"><span>叶菜数量</span><b>2,680株</b></div><div class="stat-line"><span>{{selected.kind==='plot'?'田块':'关联田块'}}</span><b>{{selectedPlot?.name??'暂无绑定'}}</b></div><div class="stat-line"><span>土壤湿度</span><b>{{selectedInvalid?'—':selectedPlot?.moisture??'—'}}%</b></div><div class="stat-line"><span>灌溉观测状态</span><b>{{selectedInvalid?'数据缺失或过期':selectedPlot?.status??'未知'}}</b></div><div class="stat-line"><span>流量 / 累计用水</span><b>{{selectedInvalid?'—':selectedPlot?.flowM3h??'—'}} m³/h / {{selectedInvalid?'—':selectedPlot?.completedM3.toFixed(2)??'—'}} m³</b></div><div class="stat-line"><span>灌溉进度</span><b>{{selectedInvalid?'—':Math.round((selectedPlot?.completedM3??0)/(selectedPlot?.plannedM3??12)*100)}}%</b></div><p v-if="selected.kind!=='plot'" class="card-footnote">所属田块汇总 · 非{{selected.kind==='controller'?'柜体':'单探头'}}独立遥测，不表示真实硬件控制或执行反馈。</p></template>
       <div class="stat-line"><span>数据质量</span><b>{{selectedInvalid?'缺失或过期':'有效模拟数据'}}</b></div><p class="card-footnote">DEMO · park-demo-v1 · {{data?time(selectedPlot?.timestamp??data.timestamp):'暂无数据'}}</p>
-      <div class="entity-actions"><button class="hud-action" data-testid="focus-selected" @click="focusEntity(selected.id)">聚焦观察</button><button class="hud-action" data-testid="clear-selection" @click="facade()?.selectEntity(null)">取消选择</button></div><p class="card-footnote">{{state?.interaction?.focusStatus==='moving'?'正在聚焦 · 操作鼠标即可中断':state?.interaction?.focusStatus==='arrived'?'已到达观察位置':state?.interaction?.focusStatus==='interrupted'?'聚焦已中断':'单击选择 · 双击聚焦'}} · DEMO</p>
+      <div class="entity-actions">
+        <button class="hud-action" data-testid="focus-selected" @click="focusEntity(selected.id)">聚焦观察</button>
+        <button v-if="selectedInteriorShot" class="hud-action" data-testid="enter-greenhouse" @click="goShot(selectedInteriorShot.id)">进入棚内</button>
+        <button class="hud-action" data-testid="clear-selection" @click="facade()?.selectEntity(null)">取消选择</button>
+      </div>
+      <p class="card-footnote">{{dofActive?'景深已生效 · 转动镜头后退出':focusStatus==='moving'?'正在聚焦 · 操作鼠标即可中断':focusStatus==='arrived'?'已到达观察位置':focusStatus==='interrupted'?'聚焦已中断':'单击选择 · 双击聚焦'}} · DEMO</p>
      </section>
      <section class="hud-card" v-else-if="data"><div class="card-heading"><h2>温室环境概况</h2><span>GREENHOUSES</span></div><div class="greenhouse-table"><div class="greenhouse-table-head"><span>生产单元</span><span>温度</span><span>湿度</span></div><div v-for="house in data.greenhouses" :key="house.id" class="greenhouse-reading" :data-entity-id="house.id"><span><button class="entity-text-link" :data-list-entity="house.id" @click="navigateEntity(house.id)">{{house.name}}</button><small>780 叶菜 · 10 番茄</small></span><strong>{{house.temperature}}<small>°C</small></strong><strong>{{house.humidity}}<small>%</small></strong></div></div><div class="co2-strip"><span>棚内 CO₂</span><b>{{data.greenhouses[0].co2}}–{{data.greenhouses[2].co2}} ppm</b></div></section>
      <section class="hud-card data-visual-card" data-testid="data-visual-card"><div class="card-heading"><h2>{{samplePlot?.name??'田块'}} · 数据表现</h2><span>ALL PLOTS · DEMO</span></div>

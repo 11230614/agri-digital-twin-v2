@@ -24,6 +24,7 @@ export interface MapState {
   readonly lastError?: { readonly code: string; readonly message: string };
 }
 export interface SceneSnapshot {
+  readonly postProcessing?:import('./post-processing').PostProcessingSnapshot;
   readonly appearance?:import('./environment').EnvironmentAppearance;
   readonly monitoring?:import('../../data/DemoMonitoringSource').MonitoringSnapshot;
   readonly plotVisuals?:readonly import('./data-visual').DataVisualSnapshot[];
@@ -46,6 +47,7 @@ export interface SceneSnapshot {
   readonly camera?: {readonly rightM?:Vec3;readonly positionM?:Vec3;readonly fovDeg:number;readonly nearM:number;readonly farM:number};
 }
 export interface SceneFacade {
+  setPostProcessing(settings:import('./post-processing').PostProcessingSettings):void;
   setEnvironmentPreset(preset:import('./environment').EnvironmentPreset):void;
   setDataVisualPlot(id:string):void;
   setVegetationMode(mode:import('./data-visual').VegetationMode):void;

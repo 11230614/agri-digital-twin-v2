@@ -2,6 +2,7 @@ import { Color, EllipsoidTerrainProvider, SceneMode, Viewer } from 'cesium';
 import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace, WebGLRenderer } from 'three';
 import type { CameraShot, SceneFacade, SceneSnapshot, RuntimeStatus } from '../ports/scene';
 import type { SceneContent } from '../../rendering/SceneContent';
+import type { PostProcessingSettings } from '../ports/post-processing';
 import { CALIBRATION_SHOTS } from '../../config/calibration-shots';
 import { GeoReferenceAdapter } from '../../spatial/GeoReferenceAdapter';
 import { CameraBridge } from '../../rendering/CameraBridge';
@@ -12,6 +13,7 @@ import { FrameCoordinator } from './FrameCoordinator';
 import {createLocalSky} from '../../rendering/LocalSky';
 import {EntityPickInput} from '../../rendering/EntityPickInput';
 import {EntityLabelLayer} from '../../rendering/EntityLabelLayer';
+import {PostProcessingManager} from '../../rendering/PostProcessingManager';
 import {createDemoMonitoringSource} from '../../data/DemoMonitoringSource';
 
 /** Stage 1–2 composition root. Agricultural ECS/services are added in their stages. */
@@ -24,6 +26,7 @@ export class FarmRuntime {
   private readonly listeners=new Set<(state:SceneSnapshot)=>void>();
   private viewer?:Viewer;
   private renderer?:WebGLRenderer;
+  private postProcessing?:PostProcessingManager;
   private controller?:CameraController;
   private frames?:FrameCoordinator;
   private map?:MapLayerManager;
@@ -35,6 +38,7 @@ export class FarmRuntime {
   private demo?:ReturnType<typeof createDemoMonitoringSource>;
   private snapshot:SceneSnapshot={runtime:'idle',map:{status:'loading',sourceId:'local-sentinel2',generation:0,offlineFallback:false},shotId:CALIBRATION_SHOTS[0].id,overlayVisible:true,surfacesVisible:true,viewport:{width:0,height:0,dpr:1},alignmentErrorPx:null,renderedFrames:0,threeDrawCalls:0,threeTriangles:0};
   private readonly facade:SceneFacade={
+    setPostProcessing:settings=>{this.postProcessing?.set(settings);this.snapshot={...this.snapshot,postProcessing:this.postProcessing?.snapshot};this.publish();},
     setEnvironmentPreset:preset=>{
       if(this.status!=='running'&&this.status!=='paused')return;
       const environment=this.calibration?.environmentController;if(!environment)return;
@@ -85,7 +89,7 @@ export class FarmRuntime {
     retryMap:async()=>{await this.map?.load();},
     pause:()=>this.pause(),resume:()=>this.resume(),
   };
-  constructor(private readonly host:HTMLElement,private readonly contentFactory:(renderer:WebGLRenderer)=>SceneContent=createCalibrationScene,shots:readonly CameraShot[]=CALIBRATION_SHOTS,private readonly renderOptions:{localNavigation?:boolean;imageryOnlyCesium?:boolean;cameraPath?:(timeS:number,width:number,height:number)=>CameraShot}={}) {
+  constructor(private readonly host:HTMLElement,private readonly contentFactory:(renderer:WebGLRenderer)=>SceneContent=createCalibrationScene,shots:readonly CameraShot[]=CALIBRATION_SHOTS,private readonly renderOptions:{localNavigation?:boolean;imageryOnlyCesium?:boolean;cameraPath?:(timeS:number,width:number,height:number)=>CameraShot;postProcessing?:PostProcessingSettings}={}) {
     if(!shots.length)throw new Error('镜头清单不能为空');
     this.shots=shots;this.snapshot={...this.snapshot,shotId:shots[0].id};
   }
@@ -143,6 +147,9 @@ export class FarmRuntime {
       const bridge=new CameraBridge(geo);
       const calibration=this.calibration=this.contentFactory(renderer);
       this.cleanup.push(()=>{calibration.dispose();this.calibration=undefined;});
+      const post=this.postProcessing=new PostProcessingManager(renderer,calibration.bloomSources,calibration.depthSample);
+      this.cleanup.push(()=>{post.dispose();this.postProcessing=undefined;});
+      if(this.renderOptions.postProcessing)post.set(this.renderOptions.postProcessing);
       if(calibration.dataVisuals){
         const demo=this.demo=createDemoMonitoringSource();
         const stop=demo.start(monitoring=>{calibration.dataVisuals!.apply(monitoring);this.snapshot={...this.snapshot,monitoring};this.publish();});
@@ -174,7 +181,7 @@ export class FarmRuntime {
       const resize=()=>{
         const width=Math.max(1,this.host.clientWidth),height=Math.max(1,this.host.clientHeight);
         const dpr=Math.min(window.devicePixelRatio||1,1.5);
-        renderer.setPixelRatio(dpr);renderer.setSize(width,height,false);
+        renderer.setPixelRatio(dpr);renderer.setSize(width,height,false);post.resize(Math.floor(width*dpr),Math.floor(height*dpr));
         viewer.resolutionScale=dpr/(window.devicePixelRatio||1);
         viewer.resize();controller.setFrustum(width,height);
         this.snapshot={...this.snapshot,viewport:{width,height,dpr}};
@@ -198,16 +205,18 @@ export class FarmRuntime {
         bridge.sync(viewer.camera);
         calibration.scene.updateMatrixWorld(true);
         calibration.prepareRender?.(bridge.camera,this.snapshot.viewport.height);
-        renderer.setRenderTarget(null);renderer.setScissorTest(false);
-        renderer.clear(true,true,true);
-        if(this.snapshot.overlayVisible)renderer.render(calibration.scene,bridge.camera);
+        post.render(calibration.scene,bridge.camera,calibration.dataVisuals?.snapshot.mode==='ndvi',this.snapshot.overlayVisible,{
+          focusId:calibration.interaction?.selectedId??null,
+          arrived:controller.focusStatus==='arrived',
+          reducedMotion:reducedMotion.matches,
+        });
         labels?.render(bridge.camera,this.snapshot.viewport.width,this.snapshot.viewport.height,calibration.interaction?.selectedId??null,this.entityLabelsVisible&&this.snapshot.overlayVisible);
         this.snapshot={...this.snapshot,renderedFrames:this.snapshot.renderedFrames+1};
         if(performance.now()-lastPublish>250){
           lastPublish=performance.now();
           const {width,height}=this.snapshot.viewport;
           if(calibration.interaction)this.updateInteraction();
-          this.snapshot={...this.snapshot,dataVisual:calibration.dataVisuals?.snapshot,plotVisuals:calibration.dataVisuals?.snapshots,navigation:controller.navigationState,alignmentErrorPx:bridge.measureScreenError(viewer.scene,CALIBRATION_POINTS,width,height),camera:{rightM:bridge.camera.matrixWorld.elements.slice(0,3) as [number,number,number],positionM:bridge.camera.position.toArray() as [number,number,number],fovDeg:bridge.camera.fov,nearM:bridge.camera.near,farM:bridge.camera.far},threeDrawCalls:this.snapshot.overlayVisible?renderer.info.render.calls:0,threeTriangles:this.snapshot.overlayVisible?renderer.info.render.triangles:0};
+          this.snapshot={...this.snapshot,dataVisual:calibration.dataVisuals?.snapshot,plotVisuals:calibration.dataVisuals?.snapshots,navigation:controller.navigationState,alignmentErrorPx:bridge.measureScreenError(viewer.scene,CALIBRATION_POINTS,width,height),camera:{rightM:bridge.camera.matrixWorld.elements.slice(0,3) as [number,number,number],positionM:bridge.camera.position.toArray() as [number,number,number],fovDeg:bridge.camera.fov,nearM:bridge.camera.near,farM:bridge.camera.far},postProcessing:post.snapshot,threeDrawCalls:this.snapshot.overlayVisible?renderer.info.render.calls:0,threeTriangles:this.snapshot.overlayVisible?renderer.info.render.triangles:0};
           this.publish();
         }
       });
